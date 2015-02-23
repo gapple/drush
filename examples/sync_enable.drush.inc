@@ -54,6 +54,7 @@ function sync_enable_drush_help_alter(&$command) {
     $command['options']['enable']  = "Enable the specified modules in the target database after the sync operation has completed.";
     $command['options']['disable'] = "Disable the specified modules in the target database after the sync operation has completed.";
     $command['options']['permission'] = "Add or remove permissions from a role in the target database after the sync operation has completed. The value of this option must be an array, so it may only be specified in a site alias record or drush configuration file.  See `drush topic docs-example-sync-extension`.";
+    $command['options']['commands'] = "Run drush commands";
   }
 }
 
@@ -65,6 +66,29 @@ function sync_enable_drush_help_alter(&$command) {
  * any modules to enable/disable.  If so, we will call pm-enable/pm-disable on each module.
  */
 function drush_sync_enable_post_sql_sync($source = NULL, $destination = NULL) {
+
+  $commands = drush_get_option('commands');
+  if (!empty($commands)) {
+    drush_print(dt("Run post-sql-sync commands:", array('!command' => $commands)));
+    foreach ($commands as $command => $settings) {
+      if (is_string($settings)) {
+        // If the item is a string, treat it as a command with no arguments.
+        $command = $settings;
+        $settings = array();
+      }
+      elseif (!empty($settings['command'])) {
+        // Allow specifying the command within the array so that the same
+        // command can be run multiple times.
+        $command = $settings['command'];
+      }
+
+      $args = empty($settings['args'])? array() : $settings['args'];
+      $options = empty($settings['options'])? array() : $settings['options'];
+      drush_print(dt("* !command", array('!command' => $command)));
+      drush_invoke_process($destination, $command, $args, $options);
+    }
+  }
+
   $modules_to_enable = drush_get_option_list('enable');
   if (!empty($modules_to_enable)) {
     drush_log(dt("Enable !modules post-sql-sync", array('!modules' => implode(',', $modules_to_enable))), 'ok');
