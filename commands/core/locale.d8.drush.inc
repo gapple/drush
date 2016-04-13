@@ -34,7 +34,19 @@ function locale_drush_command() {
     ],
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
   ];
-  // @todo Implement proper export and import commands.
+  $items['locale-import'] = [
+    'description' => 'Import a translation file.',
+    'drupal dependencies' => ['locale'],
+    'arguments' => [
+      'langcode' => 'The language code to update.',
+      'file' => 'Path to the translation file to import',
+    ],
+    'required-arguments' => TRUE,
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
+  ];
+
+  // @todo Implement export command.
+
   return $items;
 }
 
@@ -117,6 +129,44 @@ function drush_locale_update() {
     if ($batch = locale_config_batch_update_components($options, $langcodes)) {
       batch_set($batch);
     }
+  }
+
+  drush_backend_batch_process();
+}
+
+/**
+ * Imports a translation file.
+ *
+ * @see Drupal\locale\Form\ImportForm::submitForm()
+ */
+function drush_locale_import($langcode, $filename) {
+  $module_handler = \Drupal::moduleHandler();
+  $module_handler->loadInclude('locale', 'translation.inc');
+  $module_handler->loadInclude('locale', 'bulk.inc');
+
+  $language = \Drupal::languageManager()->getLanguage($langcode);
+  if (!$language) {
+    return drush_set_error("Specified language does not exist");
+  }
+
+  $options = array_merge(_locale_translation_default_update_options(), [
+    'langcode' => $langcode,
+    'overwrite_options' => ['not_customized'],
+    'customized' => LOCALE_NOT_CUSTOMIZED,
+  ]);
+
+  $file = (object) [
+    'filename' => basename($filename),
+    'uri' => $filename,
+    'langcode' => $langcode,
+  ];
+
+  $batch = locale_translate_batch_build([$file->uri => $file], $options);
+  batch_set($batch);
+
+  // Create or update all configuration translations for this language.
+  if (($batch = locale_config_batch_update_components($options, [$langcode]))) {
+    batch_set($batch);
   }
 
   drush_backend_batch_process();
